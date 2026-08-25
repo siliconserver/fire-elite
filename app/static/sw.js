@@ -1,6 +1,7 @@
 const CACHE_NAME = "fire-elite-static-v1";
 const STATIC_ASSETS = [
   "/static/style.css",
+  "/static/logo.png",
   "/static/vendor/chart.umd.min.js",
   "/static/icons/icon-192.png",
   "/static/icons/icon-512.png",
