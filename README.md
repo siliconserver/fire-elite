@@ -1,4 +1,4 @@
-# Fire Elite
+# Fire Elite (Feuerwehr Einsatz- Logbuch für Individuelle Tätigkeits- und Erfassung)
 
 Web-Tool zum Erfassen und Auswerten von Feuerwehreinsätzen. Läuft komplett per
 `docker compose` (Postgres + FastAPI-App), alle Daten liegen dauerhaft im
