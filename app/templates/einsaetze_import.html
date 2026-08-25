@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}CSV-Import{% endblock %}
+{% block content %}
+<h1>Einsätze aus CSV importieren</h1>
+
+{% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+
+<section class="panel full-panel">
+  <p>
+    Die Datei muss genau diese Spalten enthalten (in beliebiger Reihenfolge der Zeilen, Kopfzeile exakt so):
+  </p>
+  <p><code>nummer,start,ende,ort,art,funktion,eingesetzt,alarmierung,bemerkungen,einsatzmittel,angeschnauft,agt</code></p>
+  <ul class="muted">
+    <li><code>start</code> / <code>ende</code>: Zeitstempel inkl. Zeitzone, z. B. <code>2021-05-22 13:05:00+02</code></li>
+    <li><code>art</code>: TH, Brand, Dienstleistung oder Gefahrstoffe</li>
+    <li><code>funktion</code>: TM, AGT, MA, FEZ, GF, EL oder „In Bereitstellung“</li>
+    <li><code>eingesetzt</code> / <code>angeschnauft</code>: <code>true</code> / <code>false</code> (angeschnauft darf leer sein)</li>
+    <li><code>agt</code>: PA, Filter, CSA oder leer</li>
+    <li><code>einsatzmittel</code>: wird automatisch angelegt, falls es noch nicht existiert (darf leer sein)</li>
+  </ul>
+  <p class="muted">
+    Bereits vorhandene Einsatznummern führen zum Abbruch des gesamten Imports (kein Teil-Import).
+  </p>
+
+  <form method="post" action="/einsaetze/import" enctype="multipart/form-data" class="form-grid" style="margin-top:1rem;">
+    <label class="full">CSV-Datei
+      <input type="file" name="file" accept=".csv,text/csv" required>
+    </label>
+    <div class="full actions">
+      <button type="submit" class="btn">Importieren</button>
+      <a href="/einsaetze" class="btn-secondary">Abbrechen</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<form method="get" action="/" class="range-picker" id="range-form">
+  <label>Zeitraum
+    <select name="preset" id="preset-select">
+      {% for value, label in range_presets %}
+      <option value="{{ value }}" {{ "selected" if preset == value }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label id="from-label" style="{{ '' if preset == 'custom' else 'display:none;' }}">Von
+    <input type="date" name="from" value="{{ from_date }}">
+  </label>
+  <label id="to-label" style="{{ '' if preset == 'custom' else 'display:none;' }}">Bis
+    <input type="date" name="to" value="{{ to_date }}">
+  </label>
+  <div class="actions">
+    <button type="submit" class="btn">Anwenden</button>
+  </div>
+</form>
+
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.total_hours }} h</div>
+    <div class="stat-label">Zeit gesamt</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.avg_hours }} h</div>
+    <div class="stat-label">Ø Einsatzzeit</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.count }}</div>
+    <div class="stat-label">Einsätze</div>
+  </div>
+</div>
+
+<div class="chart-grid">
+  <div class="chart-card">
+    <h2>Eingesetzt in Auswahl</h2>
+    {% if stats.eingesetzt %}<div class="chart-wrap"><canvas id="chart-eingesetzt"></canvas></div>
+    {% else %}<div class="chart-empty">Keine Daten im Zeitraum.</div>{% endif %}
+  </div>
+  <div class="chart-card">
+    <h2>PA-Typen</h2>
+    {% if stats.pa_typen %}<div class="chart-wrap"><canvas id="chart-pa-typen"></canvas></div>
+    {% else %}<div class="chart-empty">Keine Daten im Zeitraum.</div>{% endif %}
+  </div>
+  <div class="chart-card">
+    <h2>PA-Einsätze (angeschnauft)</h2>
+    {% if stats.pa_einsaetze %}<div class="chart-wrap"><canvas id="chart-pa-einsaetze"></canvas></div>
+    {% else %}<div class="chart-empty">Keine Daten im Zeitraum.</div>{% endif %}
+  </div>
+  <div class="chart-card">
+    <h2>Einsatzarten</h2>
+    {% if stats.art %}<div class="chart-wrap"><canvas id="chart-art"></canvas></div>
+    {% else %}<div class="chart-empty">Keine Daten im Zeitraum.</div>{% endif %}
+  </div>
+  <div class="chart-card">
+    <h2>Funktionen</h2>
+    {% if stats.funktion %}<div class="chart-wrap"><canvas id="chart-funktion"></canvas></div>
+    {% else %}<div class="chart-empty">Keine Daten im Zeitraum.</div>{% endif %}
+  </div>
+  <div class="chart-card">
+    <h2>Einsatzmittel</h2>
+    {% if stats.einsatzmittel %}<div class="chart-wrap"><canvas id="chart-einsatzmittel"></canvas></div>
+    {% else %}<div class="chart-empty">Keine Daten im Zeitraum.</div>{% endif %}
+  </div>
+  <div class="chart-card">
+    <h2>Einsatzort</h2>
+    {% if stats.ort %}<div class="chart-wrap"><canvas id="chart-ort"></canvas></div>
+    {% else %}<div class="chart-empty">Keine Daten im Zeitraum.</div>{% endif %}
+  </div>
+  <div class="chart-card">
+    <h2>Einsatzstichwort</h2>
+    {% if stats.alarmierung %}<div class="chart-wrap"><canvas id="chart-alarmierung"></canvas></div>
+    {% else %}<div class="chart-empty">Keine Daten im Zeitraum.</div>{% endif %}
+  </div>
+  <div class="chart-card wide">
+    <h2>Einsätze pro Monat</h2>
+    {% if stats.monthly %}<div class="chart-wrap"><canvas id="chart-monthly"></canvas></div>
+    {% else %}<div class="chart-empty">Keine Daten im Zeitraum.</div>{% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("preset-select").addEventListener("change", function () {
+  var isCustom = this.value === "custom";
+  document.getElementById("from-label").style.display = isCustom ? "" : "none";
+  document.getElementById("to-label").style.display = isCustom ? "" : "none";
+  if (!isCustom) this.form.submit();
+});
+</script>
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+var stats = {{ stats_json | safe }};
+
+var PALETTE = [
+  "#e0512f", "#3fb950", "#58a6ff", "#f0b429", "#a371f7",
+  "#f778ba", "#39c5cf", "#ff8c42", "#8b909c", "#6e7681",
+];
+
+function pieChart(canvasId, items) {
+  var el = document.getElementById(canvasId);
+  if (!el || !items || !items.length) return;
+  new Chart(el, {
+    type: "pie",
+    data: {
+      labels: items.map(function (i) { return i.label; }),
+      datasets: [{ data: items.map(function (i) { return i.count; }), backgroundColor: PALETTE }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom", labels: { color: "#e6e8eb", boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              var item = items[ctx.dataIndex];
+              return item.label + ": " + item.count + " (" + item.pct + "%)";
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function barChart(canvasId, items) {
+  var el = document.getElementById(canvasId);
+  if (!el || !items || !items.length) return;
+  new Chart(el, {
+    type: "bar",
+    data: {
+      labels: items.map(function (i) { return i.label; }),
+      datasets: [{ data: items.map(function (i) { return i.count; }), backgroundColor: "#e0512f" }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: "#8b909c" }, grid: { color: "#2b2f38" } },
+        y: { ticks: { color: "#8b909c" }, grid: { color: "#2b2f38" }, beginAtZero: true, precision: 0 },
+      },
+    },
+  });
+}
+
+pieChart("chart-eingesetzt", stats.eingesetzt);
+pieChart("chart-pa-typen", stats.pa_typen);
+pieChart("chart-pa-einsaetze", stats.pa_einsaetze);
+pieChart("chart-art", stats.art);
+pieChart("chart-funktion", stats.funktion);
+pieChart("chart-einsatzmittel", stats.einsatzmittel);
+pieChart("chart-ort", stats.ort);
+pieChart("chart-alarmierung", stats.alarmierung);
+barChart("chart-monthly", stats.monthly);
+</script>
+{% endblock %}

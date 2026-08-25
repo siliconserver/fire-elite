@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Fahrzeuge{% endblock %}
+{% block content %}
+<h1>Fahrzeuge / Einsatzmittel <span class="count">{{ fahrzeuge|length }}</span></h1>
+
+<div class="table-wrap">
+<table class="data-table">
+  <thead><tr><th>Name</th><th>Einsätze</th>{% if user.role.value == "admin" %}<th></th>{% endif %}</tr></thead>
+  <tbody>
+  {% for f in fahrzeuge %}
+    <tr>
+      <td>{{ f.name }}</td>
+      <td>{{ counts.get(f.id, 0) }}</td>
+      {% if user.role.value == "admin" %}
+      <td>
+        <form method="post" action="/fahrzeuge/{{ f.id }}/delete" style="display:inline"
+              onsubmit="return confirm('Einsatzmittel „{{ f.name }}“ wirklich löschen?');">
+          <button type="submit" class="btn-secondary">Löschen</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+  {% else %}
+    <tr><td colspan="3" class="muted">Noch keine Einsatzmittel angelegt.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if user.role.value == "admin" %}
+<section id="neu" class="panel full-panel" style="margin-top:1.5rem;">
+  <h2>Neues Einsatzmittel</h2>
+  <form method="post" action="/fahrzeuge/new" class="form-grid">
+    <label>Name<input type="text" name="name" required autofocus placeholder="z. B. HLF20"></label>
+    <div class="full actions">
+      <button type="submit" class="btn">Anlegen</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

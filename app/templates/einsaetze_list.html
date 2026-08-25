@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Einsätze{% endblock %}
+{% block content %}
+<h1>Einsätze <span class="count">{{ einsaetze|length }}</span></h1>
+
+{% if user.role.value == "admin" %}
+<div class="actions" style="margin-bottom:1rem;">
+  <a href="/einsaetze/new" class="btn">+ Neuer Einsatz</a>
+  <a href="/einsaetze/import" class="btn-secondary">CSV-Import</a>
+</div>
+{% endif %}
+
+<div class="table-wrap">
+<table class="data-table">
+  <thead>
+    <tr>
+      <th>Nr.</th>
+      <th>Start</th>
+      <th>Ende</th>
+      <th>Ort</th>
+      <th>Art</th>
+      <th>Funktion</th>
+      <th>Alarmierung</th>
+      <th>Einsatzmittel</th>
+      <th>AGT</th>
+      {% if user.role.value == "admin" %}<th></th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for e in einsaetze %}
+    <tr>
+      <td>{{ e.nummer }}</td>
+      <td>{{ e.start.strftime("%d.%m.%Y %H:%M") }}</td>
+      <td>{{ e.ende.strftime("%d.%m.%Y %H:%M") }}</td>
+      <td class="wrap">{{ e.ort }}</td>
+      <td>{{ e.art.value }}</td>
+      <td>{{ e.funktion.value }}</td>
+      <td class="wrap">{{ e.alarmierung }}</td>
+      <td>{{ e.einsatzmittel.name if e.einsatzmittel else "—" }}</td>
+      <td>{% if e.angeschnauft %}{{ e.agt.value if e.agt else "—" }}{% else %}—{% endif %}</td>
+      {% if user.role.value == "admin" %}
+      <td class="backup-actions">
+        <a href="/einsaetze/{{ e.id }}/edit" class="btn-secondary">Bearbeiten</a>
+        <form method="post" action="/einsaetze/{{ e.id }}/delete" style="display:inline"
+              onsubmit="return confirm('Einsatz #{{ e.nummer }} wirklich löschen?');">
+          <button type="submit" class="btn-secondary">Löschen</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+  {% else %}
+    <tr><td colspan="10" class="muted">Noch keine Einsätze erfasst.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

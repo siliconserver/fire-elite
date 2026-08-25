@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}{{ "Einsatz bearbeiten" if einsatz else "Neuer Einsatz" }}{% endblock %}
+{% block content %}
+<h1>{{ "Einsatz #%d bearbeiten" % einsatz.nummer if einsatz else "Neuer Einsatz" }}</h1>
+
+<form method="post" action="{{ '/einsaetze/%d/edit' % einsatz.id if einsatz else '/einsaetze/new' }}" class="form-grid" id="einsatz-form">
+  <label>Nummer
+    <input type="number" name="nummer" id="f-nummer" min="1" step="1" value="{{ next_nummer }}" required>
+  </label>
+  <p class="muted full" style="margin-top:-0.6rem;">
+    Ist diese Nummer bereits vergeben, rücken sie und alle nachfolgenden Nummern automatisch eins auf.
+  </p>
+
+  <label>Start
+    <input type="datetime-local" name="start" value="{{ einsatz.start.strftime('%Y-%m-%dT%H:%M') if einsatz else '' }}" required>
+  </label>
+  <label>Ende
+    <input type="datetime-local" name="ende" value="{{ einsatz.ende.strftime('%Y-%m-%dT%H:%M') if einsatz else '' }}" required>
+  </label>
+
+  <label>Ort
+    <input type="text" name="ort" value="{{ einsatz.ort if einsatz else '' }}" required>
+  </label>
+  <label>Art
+    <select name="art" required>
+      {% for a in art_options %}
+      <option value="{{ a.value }}" {{ "selected" if einsatz and einsatz.art == a }}>{{ a.value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="checkbox">
+    <input type="checkbox" name="eingesetzt" id="f-eingesetzt" {{ "checked" if not einsatz or einsatz.eingesetzt }}>
+    Eingesetzt
+  </label>
+
+  <label id="label-funktion">Funktion
+    <select name="funktion" id="f-funktion">
+      {% for f in funktion_options %}
+      <option value="{{ f.value }}" {{ "selected" if einsatz and einsatz.funktion == f }}>{{ f.value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="full">Alarmierung (Einsatzstichwort)
+    <input type="text" name="alarmierung" list="alarmierung-list" value="{{ einsatz.alarmierung if einsatz else '' }}" required>
+    <datalist id="alarmierung-list">
+      {% for a in alarmierungen %}
+      <option value="{{ a }}">
+      {% endfor %}
+    </datalist>
+  </label>
+
+  <label>Einsatzmittel
+    <select name="einsatzmittel_id">
+      <option value="">— keins —</option>
+      {% for em in einsatzmittel_list %}
+      <option value="{{ em.id }}" {{ "selected" if einsatz and einsatz.einsatzmittel_id == em.id }}>{{ em.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="checkbox" id="label-angeschnauft">
+    <input type="checkbox" name="angeschnauft" id="f-angeschnauft" {{ "checked" if einsatz and einsatz.angeschnauft }}>
+    Angeschnauft
+  </label>
+
+  <label id="label-agt">AGT-Gerät
+    <select name="agt" id="f-agt">
+      <option value="">—</option>
+      {% for g in agt_options %}
+      <option value="{{ g.value }}" {{ "selected" if einsatz and einsatz.agt == g }}>{{ g.value }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label class="full">Bemerkungen
+    <textarea name="bemerkungen" rows="4">{{ einsatz.bemerkungen if einsatz and einsatz.bemerkungen else '' }}</textarea>
+  </label>
+
+  <div class="full actions">
+    <button type="submit" class="btn">Speichern</button>
+    <a href="/einsaetze" class="btn-secondary">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var eingesetzt = document.getElementById("f-eingesetzt");
+  var funktion = document.getElementById("f-funktion");
+  var labelFunktion = document.getElementById("label-funktion");
+  var angeschnauft = document.getElementById("f-angeschnauft");
+  var labelAngeschnauft = document.getElementById("label-angeschnauft");
+  var agt = document.getElementById("f-agt");
+  var labelAgt = document.getElementById("label-agt");
+
+  function setDisabled(label, input, disabled) {
+    label.classList.toggle("field-disabled", disabled);
+    input.tabIndex = disabled ? -1 : 0;
+  }
+
+  function applyEingesetzt() {
+    var on = eingesetzt.checked;
+    setDisabled(labelFunktion, funktion, !on);
+    if (!on) {
+      funktion.value = "In Bereitstellung";
+    } else if (funktion.value === "In Bereitstellung") {
+      funktion.value = "TM";
+    }
+    applyFunktion();
+  }
+
+  function applyFunktion() {
+    var isAgt = eingesetzt.checked && funktion.value === "AGT";
+    setDisabled(labelAngeschnauft, angeschnauft, !isAgt);
+    if (!isAgt) {
+      angeschnauft.checked = false;
+    }
+    applyAngeschnauft();
+  }
+
+  function applyAngeschnauft() {
+    var on = !labelAngeschnauft.classList.contains("field-disabled") && angeschnauft.checked;
+    setDisabled(labelAgt, agt, !on);
+    if (!on) {
+      agt.value = "";
+    }
+  }
+
+  eingesetzt.addEventListener("change", applyEingesetzt);
+  funktion.addEventListener("change", applyFunktion);
+  angeschnauft.addEventListener("change", applyAngeschnauft);
+
+  applyEingesetzt();
+})();
+</script>
+{% endblock %}
