@@ -1,0 +1,303 @@
+---
+- name: Deploy Fire Elite
+  hosts: fire_elite
+  become: true
+  gather_facts: true
+  vars_files:
+    - secrets.yml
+
+  tasks:
+    - name: Validate operating system and required settings
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution in ["AlmaLinux", "Debian"]
+          - fire_elite_domain | length > 0
+          - fire_elite_domain not in ["fire.example.org", "example.org"]
+          - fire_elite_admin_password | length >= 14
+          - fire_elite_admin_password not in ["REPLACE_WITH_A_LONG_UNIQUE_PASSWORD", "bitte-aendern", "changeme123", "password123"]
+          - fire_elite_postgres_password is match("^[A-Za-z0-9_-]{32,}$")
+          - fire_elite_secret_key is match("^[A-Fa-f0-9]{64,}$")
+          - fire_elite_ssh_allowed_cidrs | length > 0 or not fire_elite_manage_host_firewall
+          - fire_elite_proxy_mode in ["caddy", "external"]
+        fail_msg: >-
+          Use AlmaLinux or Debian; set a real domain, a 14+ character admin
+          password, a 32+ character URL-safe PostgreSQL password, a 64+ digit
+          hexadecimal session key, and SSH CIDRs when managing the firewall.
+
+    - name: Install Docker repository prerequisites on Debian
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+        state: present
+        update_cache: true
+      when: ansible_distribution == "Debian"
+
+    - name: Create apt keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: ansible_distribution == "Debian"
+
+    - name: Download Docker signing key on Debian
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/debian/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        owner: root
+        group: root
+        mode: "0644"
+      when: ansible_distribution == "Debian"
+
+    - name: Add Docker apt repository on Debian
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch={{ 'amd64' if ansible_architecture in ['x86_64', 'amd64']
+          else 'arm64' }} signed-by=/etc/apt/keyrings/docker.asc]
+          https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable
+        filename: docker
+        state: present
+      when: ansible_distribution == "Debian"
+
+    - name: Install Docker repository prerequisites on AlmaLinux
+      ansible.builtin.dnf:
+        name: dnf-plugins-core
+        state: present
+        update_cache: true
+      when: ansible_distribution == "AlmaLinux"
+
+    - name: Configure Docker CentOS-compatible repository on AlmaLinux
+      ansible.builtin.get_url:
+        url: https://download.docker.com/linux/centos/docker-ce.repo
+        dest: /etc/yum.repos.d/docker-ce.repo
+        owner: root
+        group: root
+        mode: "0644"
+      when: ansible_distribution == "AlmaLinux"
+
+    - name: Install Docker Engine and Compose plugin
+      ansible.builtin.package:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+
+    - name: Enable Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Install firewalld on AlmaLinux when host firewall is managed
+      ansible.builtin.dnf:
+        name: firewalld
+        state: present
+      when:
+        - ansible_distribution == "AlmaLinux"
+        - fire_elite_manage_host_firewall
+
+    - name: Enable firewalld on AlmaLinux
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
+      when:
+        - ansible_distribution == "AlmaLinux"
+        - fire_elite_manage_host_firewall
+
+    - name: Remove unrestricted SSH service rule on AlmaLinux
+      ansible.posix.firewalld:
+        service: ssh
+        state: disabled
+        permanent: true
+        immediate: true
+      when:
+        - ansible_distribution == "AlmaLinux"
+        - fire_elite_manage_host_firewall
+
+    - name: Allow SSH from configured CIDRs on AlmaLinux
+      ansible.posix.firewalld:
+        rich_rule: >-
+          rule family="{{ 'ipv6' if ':' in item else 'ipv4' }}"
+          source address="{{ item }}"
+          port port="{{ fire_elite_ssh_port }}" protocol="tcp" accept
+        state: enabled
+        permanent: true
+        immediate: true
+      loop: "{{ fire_elite_ssh_allowed_cidrs }}"
+      when:
+        - ansible_distribution == "AlmaLinux"
+        - fire_elite_manage_host_firewall
+
+    - name: Allow web traffic on AlmaLinux
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        state: enabled
+        permanent: true
+        immediate: true
+      loop:
+        - http
+        - https
+      when:
+        - ansible_distribution == "AlmaLinux"
+        - fire_elite_manage_host_firewall
+
+    - name: Install UFW on Debian when host firewall is managed
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+      when:
+        - ansible_distribution == "Debian"
+        - fire_elite_manage_host_firewall
+
+    - name: Set Debian firewall defaults
+      ansible.builtin.command:
+        argv:
+          - ufw
+          - default
+          - "{{ item }}"
+          - "{{ 'deny' if item == 'incoming' else 'allow' }}"
+      loop:
+        - incoming
+        - outgoing
+      changed_when: false
+      when:
+        - ansible_distribution == "Debian"
+        - fire_elite_manage_host_firewall
+
+    - name: Allow SSH from configured CIDRs on Debian
+      ansible.builtin.command:
+        argv:
+          - ufw
+          - allow
+          - from
+          - "{{ item }}"
+          - to
+          - any
+          - port
+          - "{{ fire_elite_ssh_port | string }}"
+          - proto
+          - tcp
+      loop: "{{ fire_elite_ssh_allowed_cidrs }}"
+      changed_when: false
+      when:
+        - ansible_distribution == "Debian"
+        - fire_elite_manage_host_firewall
+
+    - name: Allow HTTPS ingress on Debian
+      ansible.builtin.command:
+        argv:
+          - ufw
+          - allow
+          - "{{ item }}"
+          - proto
+          - tcp
+      loop:
+        - "80"
+        - "443"
+      changed_when: false
+      when:
+        - ansible_distribution == "Debian"
+        - fire_elite_manage_host_firewall
+
+    - name: Enable UFW on Debian
+      ansible.builtin.command:
+        argv:
+          - ufw
+          - --force
+          - enable
+      changed_when: false
+      when:
+        - ansible_distribution == "Debian"
+        - fire_elite_manage_host_firewall
+
+    - name: Create application and persistent data directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - path: "{{ fire_elite_install_dir }}"
+          mode: "0755"
+        - path: "{{ fire_elite_postgres_dir }}"
+          mode: "0750"
+        - path: "{{ fire_elite_backup_dir }}"
+          mode: "0750"
+
+    - name: Write protected PostgreSQL environment file
+      ansible.builtin.template:
+        src: templates/db.env.j2
+        dest: "{{ fire_elite_install_dir }}/.env.db"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Write protected application environment file
+      ansible.builtin.template:
+        src: templates/app.env.j2
+        dest: "{{ fire_elite_install_dir }}/.env.app"
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Write Docker Compose configuration
+      ansible.builtin.template:
+        src: templates/docker-compose.yml.j2
+        dest: "{{ fire_elite_install_dir }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Write Caddy configuration
+      ansible.builtin.template:
+        src: templates/Caddyfile.j2
+        dest: "{{ fire_elite_install_dir }}/Caddyfile"
+        owner: root
+        group: root
+        mode: "0644"
+      when: fire_elite_proxy_mode == "caddy"
+
+    - name: Pull configured application and database images
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - pull
+      args:
+        chdir: "{{ fire_elite_install_dir }}"
+      changed_when: true
+
+    - name: Start Fire Elite and the selected proxy
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - up
+          - -d
+          - --remove-orphans
+      args:
+        chdir: "{{ fire_elite_install_dir }}"
+      changed_when: true
+
+    - name: Wait for Fire Elite application health
+      ansible.builtin.command:
+        argv:
+          - docker
+          - inspect
+          - --format
+          - "{{ '{{' }}.State.Health.Status{{ '}}' }}"
+          - fire-elite-app
+      register: fire_elite_health
+      retries: 18
+      delay: 5
+      until: fire_elite_health.stdout == "healthy"
+      changed_when: false

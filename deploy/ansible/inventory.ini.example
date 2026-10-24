@@ -1,0 +1,5 @@
+[fire_elite]
+fire-elite-server ansible_host=203.0.113.10 ansible_user=root
+
+[fire_elite:vars]
+ansible_ssh_private_key_file=~/.ssh/id_ed25519

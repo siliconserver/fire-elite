@@ -1,0 +1,56 @@
+services:
+  db:
+    image: {{ fire_elite_postgres_image }}
+    container_name: fire-elite-db
+    restart: unless-stopped
+    env_file:
+      - .env.db
+    volumes:
+      - "{{ fire_elite_postgres_dir }}:/var/lib/postgresql/data{% if ansible_selinux.status | default('disabled') == 'enabled' %}:Z{% endif %}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: ghcr.io/siliconserver/fire-elite:{{ fire_elite_image_tag }}
+    container_name: fire-elite-app
+    restart: unless-stopped
+    env_file:
+      - .env.app
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - "{{ fire_elite_backup_dir }}:/data/backups{% if ansible_selinux.status | default('disabled') == 'enabled' %}:Z{% endif %}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/login', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+{% if fire_elite_proxy_mode == 'external' %}
+    ports:
+      - "{{ fire_elite_bind_address }}:{{ fire_elite_http_port }}:8000"
+{% endif %}
+{% if fire_elite_proxy_mode == 'caddy' %}
+  caddy:
+    image: caddy:2
+    container_name: fire-elite-caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - "{{ fire_elite_install_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro{% if ansible_selinux.status | default('disabled') == 'enabled' %},Z{% endif %}"
+      - fire_elite_caddy_data:/data
+      - fire_elite_caddy_config:/config
+{% endif %}
+
+volumes:
+  fire_elite_caddy_data:
+  fire_elite_caddy_config:

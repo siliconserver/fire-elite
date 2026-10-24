@@ -1,0 +1,34 @@
+---
+fire_elite_domain: "fire.example.org"
+fire_elite_install_dir: /opt/fire-elite
+fire_elite_data_dir: /var/lib/fire-elite/data
+fire_elite_postgres_dir: "{{ fire_elite_data_dir }}/postgres"
+fire_elite_backup_dir: "{{ fire_elite_data_dir }}/backups"
+
+# Pin to a released image. Set to "latest" only when you want unpinned updates.
+fire_elite_image_tag: "1.9"
+fire_elite_postgres_image: "postgres:16-alpine"
+fire_elite_postgres_user: fireelite
+fire_elite_postgres_db: fireelite
+fire_elite_http_port: 8086
+
+# caddy: Caddy runs in Docker and obtains HTTPS certificates.
+# external: an existing proxy on this host forwards to 127.0.0.1:8086.
+fire_elite_proxy_mode: caddy
+fire_elite_bind_address: 127.0.0.1
+fire_elite_caddy_email: ""
+
+fire_elite_admin_username: admin
+fire_elite_admin_email: ""
+
+# Optional mail delivery for the weekly report.
+fire_elite_smtp_host: ""
+fire_elite_smtp_port: 587
+fire_elite_smtp_user: ""
+fire_elite_smtp_from: ""
+fire_elite_smtp_use_tls: true
+
+# Set administrator source CIDRs before managing the host firewall.
+fire_elite_ssh_allowed_cidrs: []
+fire_elite_ssh_port: 22
+fire_elite_manage_host_firewall: true

@@ -83,6 +83,13 @@ data/
 Für einen Umzug auf einen anderen Server kopierst du den ganzen Ordner
 (inklusive `data/` und `.env`) und startest dort mit `docker compose up -d`.
 
+## Automatisierte Installation
+
+Terraform- und Ansible-Dateien für AlmaLinux und Debian liegen in
+[deploy/](deploy/README.md). Ansible richtet neue und vorhandene VPS ein.
+Terraform-Beispiele für das Anlegen neuer Server gibt es für Hetzner Cloud,
+IONOS Cloud und Contabo.
+
 ## CSV-Import
 
 Über den Menüpunkt **CSV-Import** lädst du eine CSV-Datei hoch. Die erste Zeile muss

@@ -1,0 +1,10 @@
+{% if fire_elite_caddy_email | length > 0 %}
+{
+  email {{ fire_elite_caddy_email }}
+}
+{% endif %}
+
+{{ fire_elite_domain }} {
+  encode zstd gzip
+  reverse_proxy app:8000
+}
