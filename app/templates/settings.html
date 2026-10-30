@@ -58,6 +58,10 @@
       <button type="submit" class="btn">E-Mail-Einstellungen speichern</button>
     </div>
   </form>
+  <p class="muted" style="margin-top:0.8rem;">Weitere Kanäle für den Wochenreport:
+    {% for c in channels %}{{ c.label }} {{ "eingerichtet" if c.is_configured() else "nicht eingerichtet (siehe README)" }}{{ ", " if not loop.last }}{% endfor %}.
+    Jede Person schaltet sie im Profil unter „Benachrichtigungen“ ein; die Handynummer kann auch hier
+    in der Benutzerverwaltung eingetragen werden.</p>
   <form method="post" action="/settings/send-weekly-report-now" style="margin-top:0.8rem;">
     <button type="submit" class="btn-secondary">Wochenreport jetzt zum Testen versenden</button>
   </form>
@@ -68,12 +72,18 @@
   <h2>Benutzerverwaltung</h2>
   <div class="table-wrap">
   <table class="data-table" style="margin-bottom:1.2rem;">
-    <thead><tr><th>Benutzername</th><th>Rolle</th><th>2FA</th><th></th></tr></thead>
+    <thead><tr><th>Benutzername</th><th>Rolle</th><th>Handynummer</th><th>2FA</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
       <tr>
         <td>{{ u.username }}{% if u.id == user.id %} <span class="muted">(du)</span>{% endif %}</td>
         <td><span class="role-badge">{{ u.role.value }}</span></td>
+        <td>
+          <form method="post" action="/settings/users/{{ u.id }}/phone" style="display:inline-flex;gap:0.4rem;align-items:center;">
+            <input type="tel" name="phone" value="{{ u.phone or '' }}" placeholder="+49 170 1234567" style="width:11rem;">
+            <button type="submit" class="btn-secondary">Speichern</button>
+          </form>
+        </td>
         <td>
           {% if u.totp_enabled %}
           <form method="post" action="/settings/users/{{ u.id }}/2fa/disable" style="display:inline;" onsubmit="return confirm('2FA für {{ u.username }} wirklich deaktivieren?');">
@@ -107,6 +117,7 @@
   <form method="post" action="/settings/users/new" class="form-grid">
     <label>Benutzername<input type="text" name="username" required></label>
     <label>Passwort<input type="password" name="password" required></label>
+    <label>Handynummer (optional)<input type="tel" name="phone" placeholder="+49 170 1234567"></label>
     <label>Rolle
       <select name="role">
         <option value="viewer">Viewer (nur lesen)</option>

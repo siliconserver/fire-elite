@@ -6,6 +6,8 @@ from apscheduler.triggers.cron import CronTrigger
 import backup
 import crud
 import emailer
+import models
+import notifier
 from database import SessionLocal
 
 logger = logging.getLogger("scheduler")
@@ -20,37 +22,66 @@ def _parse_hhmm(value: str, default=(6, 0)):
         return default
 
 
-def run_weekly_report():
-    """Verschickt den wöchentlichen Einsatz-Report per Mail an den Administrator."""
+def run_weekly_report(only_user=None):
+    """Verschickt den wöchentlichen Einsatz-Report per Mail an den Administrator
+    und über die eingeschalteten Kanäle (Telegram, Signal) an die Benutzer.
+
+    Mit only_user geht der Report nur an diesen Benutzer (Test aus dem Profil),
+    Rückgabe ist dann die Ergebnisliste von notifier.send_to_user.
+    """
     db = SessionLocal()
     try:
         settings = crud.get_settings(db)
-        admin_email = settings.admin_email
-        if not admin_email:
-            logger.warning("Kein admin_email in den Einstellungen gesetzt, überspringe Wochenreport")
-            return
-
         data = crud.weekly_report_data(db)
 
-        lines = [settings.weekly_report_intro.rstrip(), ""]
-        lines.append(f"Einsätze (letzte 7 Tage): {data['count']}")
-        lines.append(f"Gesamtstunden: {data['total_hours']}")
-        lines.append("")
-        lines.append("Einzelne Einsätze:")
-        if data["rows"]:
-            for r in data["rows"]:
-                lines.append(
-                    f"  - #{r.nummer} {r.start.strftime('%d.%m.%Y %H:%M')} "
-                    f"{r.ort} – {r.alarmierung} ({r.art.value})"
-                )
-        else:
-            lines.append("  -")
+        if only_user is not None:
+            return notifier.send_to_user(only_user, weekly_report_notification(data))
 
-        emailer.send_mail(admin_email, settings.weekly_report_subject, "\n".join(lines))
+        admin_email = settings.admin_email
+        if admin_email:
+            emailer.send_mail(admin_email, settings.weekly_report_subject, weekly_report_mail_body(settings, data))
+        else:
+            logger.warning("Kein admin_email in den Einstellungen gesetzt, überspringe Wochenreport per Mail")
+
+        notification = weekly_report_notification(data)
+        for user in db.query(models.User).filter(models.User.notify_channels != "").all():
+            notifier.send_to_user(user, notification)
     except Exception:
         logger.exception("Fehler beim wöchentlichen Report")
     finally:
         db.close()
+
+
+def weekly_report_mail_body(settings, data) -> str:
+    lines = [settings.weekly_report_intro.rstrip(), ""]
+    lines.append(f"Einsätze (letzte 7 Tage): {data['count']}")
+    lines.append(f"Gesamtstunden: {data['total_hours']}")
+    lines.append("")
+    lines.append("Einzelne Einsätze:")
+    if data["rows"]:
+        for r in data["rows"]:
+            lines.append(
+                f"  - #{r.nummer} {r.start.strftime('%d.%m.%Y %H:%M')} "
+                f"{r.ort} – {r.alarmierung} ({r.art.value})"
+            )
+    else:
+        lines.append("  -")
+    return "\n".join(lines)
+
+
+def weekly_report_notification(data) -> notifier.Notification:
+    """Kurzfassung für Messenger (Telegram, Signal)."""
+    lines = [
+        "Elite Wochenreport (letzte 7 Tage)",
+        f"Einsätze: {data['count']}",
+        f"Gesamtstunden: {data['total_hours']}",
+    ]
+    for r in data["rows"]:
+        lines.append(f"#{r.nummer} {r.start.strftime('%d.%m. %H:%M')} {r.ort} – {r.alarmierung}")
+    return notifier.Notification(
+        kind="wochenreport",
+        text="\n".join(lines),
+    )
 
 
 def run_backup_job():

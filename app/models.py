@@ -35,6 +35,13 @@ class User(Base):
     # Farbschema: "system" folgt der Einstellung des Betriebssystems
     theme = Column(String(8), nullable=False, default="system", server_default="system")
 
+    # Handynummer im internationalen Format (+491701234567)
+    phone = Column(String(20), nullable=True)
+    # Chat-ID nach „Telegram verbinden“ im Profil
+    telegram_chat_id = Column(String(32), nullable=True)
+    # eingeschaltete Benachrichtigungskanäle, kommagetrennt (z.B. "telegram,signal"), siehe notifier.py
+    notify_channels = Column(String(255), nullable=False, default="", server_default="")
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

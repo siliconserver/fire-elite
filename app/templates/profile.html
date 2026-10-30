@@ -19,6 +19,46 @@
   </form>
 </section>
 
+<section id="benachrichtigungen" class="panel full-panel">
+  <h2>Benachrichtigungen</h2>
+  <p class="muted">Der Wochenreport kommt zusätzlich zur E-Mail an den Admin auch über die hier
+    eingeschalteten Kanäle zu dir.</p>
+  <form method="post" action="/profile/notifications" class="form-grid">
+    <label>Handynummer (für Signal)
+      <input type="tel" name="phone" value="{{ user.phone or '' }}" placeholder="+49 170 1234567" autocomplete="tel">
+    </label>
+    {% for c in channels %}
+    <label class="checkbox full">
+      <input type="checkbox" name="channels" value="{{ c.key }}"
+        {{ "checked" if c.key in user_channels }} {{ "disabled" if not c.is_configured() }}>
+      Wochenreport per {{ c.label }}
+      {% if not c.is_configured() %}<span class="muted">(auf diesem Server nicht eingerichtet)</span>{% endif %}
+    </label>
+    {% if c.key in user_channels and not c.is_configured() %}<input type="hidden" name="channels" value="{{ c.key }}">{% endif %}
+    {% endfor %}
+    <div class="full actions">
+      <button type="submit" class="btn">Speichern</button>
+    </div>
+  </form>
+
+  {% if user.telegram_chat_id %}
+  <p style="margin-top:0.8rem;">Telegram: <span class="badge" style="background:var(--good-bg); color:var(--good);">Verbunden</span></p>
+  <form method="post" action="/profile/telegram/disconnect">
+    <button type="submit" class="btn-secondary">Telegram trennen</button>
+  </form>
+  {% elif telegram_link %}
+  <p style="margin-top:0.8rem;">Telegram verbinden: 1. <a href="{{ telegram_link }}" target="_blank" rel="noopener">Bot in Telegram öffnen</a>
+    und dort auf „Start“ tippen. 2. Hier auf „Telegram verbinden“ klicken.</p>
+  <form method="post" action="/profile/telegram/connect">
+    <button type="submit" class="btn-secondary">Telegram verbinden</button>
+  </form>
+  {% endif %}
+
+  <form method="post" action="/profile/notifications/test" style="margin-top:0.8rem;">
+    <button type="submit" class="btn-secondary">Wochenreport testweise an mich schicken</button>
+  </form>
+</section>
+
 <section class="panel full-panel">
   <h2>Zwei-Faktor-Authentifizierung</h2>
   {% if user.totp_enabled %}

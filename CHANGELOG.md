@@ -3,6 +3,13 @@
 Alle relevanten Änderungen an Elite. Neueste Version oben.
 Diese Datei wird auch auf der Seite „Über Elite“ angezeigt; die oberste Version ist die App-Version.
 
+## 1.10 (2026-10-30)
+- Wochenreport jetzt auch per Telegram und Signal, jede Person schaltet die Kanäle im Profil unter „Benachrichtigungen“ ein
+- Handynummer für Benutzer: im eigenen Profil oder durch Admins in der Benutzerverwaltung
+- Telegram wird über einen eigenen Bot verbunden, Signal über den optionalen signal-cli-Container (Einrichtung im README)
+- Kanäle ohne Zugangsdaten in der .env bleiben ausgeschaltet
+- Profil: „Wochenreport testweise an mich schicken“
+
 ## 1.9 (2026-10-23)
 - „Über Elite“ verlinkt das Projekt auf GitHub: Quellcode, Issues und Changelog (Issue #19)
 

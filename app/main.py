@@ -6,6 +6,8 @@ from datetime import datetime
 import pyotp
 import qrcode
 import qrcode.image.svg
+from typing import List
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +21,7 @@ import backup
 import crud
 import csv_import
 import models
+import notifier
 import scheduler
 from crud import BERLIN
 from database import Base, engine, get_db
@@ -70,6 +73,12 @@ MESSAGES = {
     "totp_invalid": "Code ungültig, bitte erneut versuchen.",
     "totp_disable_wrong_password": "Passwort falsch, 2FA wurde nicht deaktiviert.",
     "theme_updated": "Darstellung wurde gespeichert.",
+    "notify_updated": "Benachrichtigungen wurden gespeichert.",
+    "phone_invalid": "Handynummer ungültig, bitte im Format 0170 1234567 oder +49 170 1234567 eingeben.",
+    "phone_updated": "Handynummer wurde gespeichert.",
+    "telegram_connected": "Telegram ist verbunden.",
+    "telegram_not_found": "Keine Start-Nachricht gefunden. Bitte zuerst den Link öffnen und im Bot auf „Start“ tippen.",
+    "telegram_disconnected": "Telegram wurde getrennt.",
 }
 
 THEMES = {"system": "Wie Betriebssystem", "light": "Hell", "dark": "Dunkel"}
@@ -128,6 +137,11 @@ def on_startup():
     with engine.begin() as conn:
         conn.execute(text(
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme VARCHAR(8) NOT NULL DEFAULT 'system'"
+        ))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id VARCHAR(32)"))
+        conn.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_channels VARCHAR(255) NOT NULL DEFAULT ''"
         ))
 
     db = next(get_db())
@@ -240,13 +254,32 @@ def _totp_qr_svg(uri: str) -> str:
     return buf.getvalue().decode("utf-8")
 
 
+def _telegram_link(user):
+    telegram = notifier.CHANNELS["telegram"]
+    if not telegram.is_configured() or user.telegram_chat_id:
+        return None
+    try:
+        return telegram.link_url(user)
+    except Exception as exc:
+        print(f"[Telegram FEHLER] getMe: {exc}")
+        return None
+
+
 @app.get("/profile", response_class=HTMLResponse)
 def profile_page(request: Request, db: Session = Depends(get_db)):
     user = current_user(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(
-        "profile.html", {"request": request, "user": user, "themes": THEMES}
+        "profile.html",
+        {
+            "request": request,
+            "user": user,
+            "themes": THEMES,
+            "channels": notifier.CHANNELS.values(),
+            "user_channels": notifier.user_channels(user),
+            "telegram_link": _telegram_link(user),
+        },
     )
 
 
@@ -259,6 +292,73 @@ def profile_theme(request: Request, theme: str = Form(...), db: Session = Depend
         user.theme = theme
         db.commit()
     return RedirectResponse("/profile?msg=theme_updated", status_code=303)
+
+
+@app.post("/profile/notifications")
+def profile_notifications(
+    request: Request,
+    phone: str = Form(""),
+    channels: List[str] = Form([]),
+    db: Session = Depends(get_db),
+):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    normalized = notifier.normalize_phone(phone)
+    if normalized is None:
+        return RedirectResponse("/profile?msg=phone_invalid#benachrichtigungen", status_code=303)
+    user.phone = normalized or None
+    user.notify_channels = ",".join(c for c in channels if c in notifier.CHANNELS)
+    db.commit()
+    return RedirectResponse("/profile?msg=notify_updated#benachrichtigungen", status_code=303)
+
+
+@app.post("/profile/telegram/connect")
+def profile_telegram_connect(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    telegram = notifier.CHANNELS["telegram"]
+    try:
+        chat_id = telegram.find_chat_id(user)
+    except Exception as exc:
+        request.session["flash"] = f"Telegram: Fehler ({exc})."
+        return RedirectResponse("/profile#benachrichtigungen", status_code=303)
+    if not chat_id:
+        return RedirectResponse("/profile?msg=telegram_not_found#benachrichtigungen", status_code=303)
+    user.telegram_chat_id = chat_id
+    if "telegram" not in notifier.user_channels(user):
+        user.notify_channels = ",".join(notifier.user_channels(user) + ["telegram"])
+    db.commit()
+    return RedirectResponse("/profile?msg=telegram_connected#benachrichtigungen", status_code=303)
+
+
+@app.post("/profile/telegram/disconnect")
+def profile_telegram_disconnect(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    user.telegram_chat_id = None
+    user.notify_channels = ",".join(c for c in notifier.user_channels(user) if c != "telegram")
+    db.commit()
+    return RedirectResponse("/profile?msg=telegram_disconnected#benachrichtigungen", status_code=303)
+
+
+@app.post("/profile/notifications/test")
+def profile_notifications_test(request: Request, db: Session = Depends(get_db)):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    results = scheduler.run_weekly_report(only_user=user) or []
+    if not results:
+        flash = "Nichts verschickt: kein eingeschalteter und eingerichteter Kanal."
+    else:
+        flash = " ".join(
+            f"{label}: verschickt." if err is None else f"{label}: Fehler ({err})."
+            for label, err in results
+        )
+    request.session["flash"] = flash
+    return RedirectResponse("/profile#benachrichtigungen", status_code=303)
 
 
 @app.post("/profile/password")
@@ -651,6 +751,7 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
             "users": users,
             "backups": backups,
             "weekdays": crud.WEEKDAYS,
+            "channels": notifier.CHANNELS.values(),
         },
     )
 
@@ -720,6 +821,7 @@ def settings_user_new(
     username: str = Form(...),
     password: str = Form(...),
     role: str = Form(...),
+    phone: str = Form(""),
     db: Session = Depends(get_db),
 ):
     user = current_user(request, db)
@@ -729,12 +831,16 @@ def settings_user_new(
 
     if db.query(models.User).filter(models.User.username == username).first():
         return RedirectResponse("/settings?msg=user_exists#benutzer", status_code=303)
+    normalized_phone = notifier.normalize_phone(phone)
+    if normalized_phone is None:
+        return RedirectResponse("/settings?msg=phone_invalid#benutzer", status_code=303)
 
     role_enum = models.Role.admin if role == "admin" else models.Role.viewer
     new_user = models.User(
         username=username,
         password_hash=auth.hash_password(password),
         role=role_enum,
+        phone=normalized_phone or None,
     )
     db.add(new_user)
     db.commit()
@@ -772,6 +878,29 @@ def settings_user_role(
     target.role = role_enum
     db.commit()
     return RedirectResponse("/settings?msg=user_role_updated#benutzer", status_code=303)
+
+
+@app.post("/settings/users/{user_id}/phone")
+def settings_user_phone(
+    user_id: int,
+    request: Request,
+    phone: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    user = current_user(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    require_admin(user)
+
+    target = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target:
+        raise HTTPException(404, "Nicht gefunden")
+    normalized = notifier.normalize_phone(phone)
+    if normalized is None:
+        return RedirectResponse("/settings?msg=phone_invalid#benutzer", status_code=303)
+    target.phone = normalized or None
+    db.commit()
+    return RedirectResponse("/settings?msg=phone_updated#benutzer", status_code=303)
 
 
 @app.post("/settings/users/{user_id}/delete")
