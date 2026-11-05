@@ -21,6 +21,8 @@ deinem eigenen Server, die Daten bleiben bei dir.
 - **CSV-Import**: Bestehende Einsätze aus einer Tabelle übernehmen (Format siehe unten).
 - **Wochenreport per E-Mail**: Einmal pro Woche eine Zusammenfassung der letzten
   sieben Tage. Tag, Uhrzeit, Empfänger und Text stellst du selbst ein.
+- **Wochenreport per Telegram oder Signal**: Jede Person kann sich den Report
+  zusätzlich aufs Handy schicken lassen (kostenlos, Einrichtung siehe unten).
 - **Backups**: Tägliche Sicherung der Datenbank, dazu manuelle Sicherung,
   Download und Wiederherstellung direkt in der Weboberfläche.
 - **Benutzer und Rollen**: Admins dürfen alles, Viewer nur lesen. Optional
@@ -47,6 +49,8 @@ Du brauchst einen Server (oder Raspberry Pi, NAS …) mit
    - `SECRET_KEY`: ein langer Zufallswert, z. B. aus `openssl rand -hex 32`
    - `ADMIN_USERNAME` / `ADMIN_PASSWORD`: dein Login
    - `SMTP_*` und `ADMIN_EMAIL`, falls du den Wochenreport per Mail willst
+   - `TELEGRAM_BOT_TOKEN` bzw. `SIGNAL_*`, falls du den Report per Messenger willst
+     (siehe [Benachrichtigungen per Telegram und Signal](#benachrichtigungen-per-telegram-und-signal))
 
 3. **Starten**:
    ```bash
@@ -78,10 +82,67 @@ Alles liegt im Ordner `data/` neben der `docker-compose.yml`:
 data/
   postgres/   # die Datenbank
   backups/    # tägliche und manuelle Backups (.sql.gz)
+  signal/     # nur bei Signal: das verknüpfte Signal-Konto
 ```
 
 Für einen Umzug auf einen anderen Server kopierst du den ganzen Ordner
 (inklusive `data/` und `.env`) und startest dort mit `docker compose up -d`.
+
+## Benachrichtigungen per Telegram und Signal
+
+Zusätzlich zur E-Mail an den Admin kann jede Person den Wochenreport per
+Telegram oder Signal bekommen. Beide sind kostenlos. Ein Kanal, für den in der
+`.env` nichts eingetragen ist, ist ausgeschaltet und erscheint im Profil
+ausgegraut. Nach jeder Änderung an der `.env`: `docker compose up -d`.
+
+Jede Person schaltet die Kanäle selbst im **Profil** unter „Benachrichtigungen“
+ein und kann dort mit „Wochenreport testweise an mich schicken“ prüfen, ob es
+klappt. Die Handynummer kann auch ein Admin unter **Einstellungen →
+Benutzerverwaltung** eintragen. Nummern dürfen mit `0` (Deutschland, andere
+Länder über `DEFAULT_COUNTRY_CODE`), `0049` oder `+49` eingegeben werden.
+
+### Telegram
+
+1. In Telegram den [@BotFather](https://t.me/BotFather) öffnen, `/newbot`
+   schicken und Namen und Benutzernamen für den Bot vergeben (z. B. `MeineWacheEliteBot`).
+2. Den Token, den der BotFather schickt, in die `.env` eintragen:
+   ```
+   TELEGRAM_BOT_TOKEN=123456789:ABC...
+   ```
+3. Jede Person öffnet im Profil den Link „Bot in Telegram öffnen“, tippt dort
+   auf „Start“ und klickt danach in Elite auf „Telegram verbinden“.
+   Ein Bot kann niemanden über die Handynummer anschreiben, deshalb ist dieser
+   Schritt nötig. Die „Start“-Nachricht muss innerhalb von 24 Stunden verbunden werden.
+
+### Signal
+
+Signal hat keine offizielle Schnittstelle. Elite nutzt dafür den Container
+[signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api), der in
+der `docker-compose.yml` schon vorbereitet ist und nur bei Bedarf startet.
+
+1. Signal-Container starten:
+   ```bash
+   docker compose --profile signal up -d
+   ```
+2. Ein Signal-Konto als Absender verknüpfen: Auf dem Server
+   `http://localhost:8087/v1/qrcodelink?device_name=fire-elite` im Browser öffnen
+   (oder per SSH-Tunnel, der Port ist nur lokal erreichbar) und den QR-Code in
+   der Signal-App unter **Einstellungen → Verknüpfte Geräte** scannen.
+   Die Nachrichten kommen dann von dieser Nummer. Wer dafür nicht seine eigene
+   Nummer nehmen will, verknüpft ein Zweithandy oder eine eigene Signal-Nummer.
+   An die eigene Nummer geschickte Reports landen in Signal unter „Notiz an mich“.
+3. In der `.env` eintragen und neu starten:
+   ```
+   SIGNAL_API_URL=http://signal:8080
+   SIGNAL_NUMBER=+491701234567
+   ```
+   ```bash
+   docker compose --profile signal up -d
+   ```
+   Das `--profile signal` muss ab jetzt auch beim Aktualisieren mit angegeben werden.
+4. Jede Person trägt im Profil ihre Handynummer ein und hakt „Wochenreport per Signal“ an.
+
+Weitere Kanäle lassen sich im Code in `app/notifier.py` ergänzen (eine Klasse je Kanal).
 
 ## CSV-Import
 

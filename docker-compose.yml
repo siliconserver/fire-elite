@@ -36,8 +36,26 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM: ${SMTP_FROM}
       SMTP_USE_TLS: ${SMTP_USE_TLS}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      SIGNAL_API_URL: ${SIGNAL_API_URL:-}
+      SIGNAL_NUMBER: ${SIGNAL_NUMBER:-}
+      DEFAULT_COUNTRY_CODE: ${DEFAULT_COUNTRY_CODE:-49}
     volumes:
       # DB-Dumps landen dauerhaft im Projektordner unter ./data/backups
       - ./data/backups:/data/backups
     ports:
       - "8086:8000"
+
+  # Optional: Versand per Signal. Startet nur mit `docker compose --profile signal up -d`.
+  signal:
+    image: bbernhard/signal-cli-rest-api:latest
+    profiles: ["signal"]
+    restart: unless-stopped
+    environment:
+      MODE: json-rpc
+    volumes:
+      # Signal-Konto (Schlüssel) dauerhaft im Projektordner
+      - ./data/signal:/home/.local/share/signal-cli
+    ports:
+      # nur lokal erreichbar, für das einmalige Verknüpfen per QR-Code
+      - "127.0.0.1:8087:8080"
